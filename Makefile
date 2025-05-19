@@ -41,7 +41,7 @@ OBJECTS = $(SOURCES:%.cpp=%.o)
 
 .PHONY: all clean
 
-all: FibresGrains see
+all: FibresGrains
 
 clean:
 	@echo "\033[0;32m-> Remove object files\033[0m"
@@ -65,4 +65,9 @@ FibresGrains: FibresGrains.cpp libFibresGrains.a
 see: see.cpp libFibresGrains.a
 	@echo "\033[0;32m-> BUILDING APPLICATION" $@ "\033[0m"
 	$(CXX) $(CXXFLAGS) -c $< -o see.o $(GLFLAGS)
-	$(CXX) -o $@ see.o libFibresGrains.a $(GLLINK)	
+	$(CXX) -o $@ see.o libFibresGrains.a $(GLLINK)
+
+build: build.cpp
+	@echo "\033[0;32m-> BUILDING APPLICATION" $@ "\033[0m"
+	$(CXX) $(CXXFLAGS) $< -o $@
+	
