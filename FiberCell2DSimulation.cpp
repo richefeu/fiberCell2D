@@ -129,11 +129,11 @@ void FiberCell2DSimulation::integrate() {
   ResetCloseList(dVerlet);
 
   bool updateVerlet;
-  double threshold = 0.95 * dVerlet * 0.5;
+  double threshold = dVerlet * 0.5;
 
   while (t < tmax) {
 
-    // ModularTransformation();
+    ModularTransformation();
 
     // Input parameters for the automatic updating
 
@@ -148,7 +148,7 @@ void FiberCell2DSimulation::integrate() {
           delta.x -= floor(delta.x + 0.5);
           delta.y -= floor(delta.y + 0.5);
 
-          //vec2r delta_real(Cell.h.xx * delta.x + Cell.h.xy * delta.y, Cell.h.yx * delta.x + Cell.h.yy * delta.y);
+          // vec2r delta_real(Cell.h.xx * delta.x + Cell.h.xy * delta.y, Cell.h.yx * delta.x + Cell.h.yy * delta.y);
           vec2r delta_real = Cell.h * delta;
           Particles[i].dpos[p] += delta_real;
           // Particles[i].dpos[p].set(Cell.hxx * delta.x + Cell.hxy * delta.y, Cell.hyx * delta.x + Cell.hyy * delta.y);
@@ -550,74 +550,60 @@ void FiberCell2DSimulation::updatePlateletMoments() {
 
 void FiberCell2DSimulation::ModularTransformation() {
   // this is ok only for shearing (should be embbeded in Loading???)
-  if (Cell.h.xy <= Cell.h.xx)
+  if (Cell.h.xy <= Cell.h.xx) {
     return;
+  }
 
   // Save the current periodic cell
-  double hxx = Cell.h.xx;
-  double hxy = Cell.h.xy;
-  double hyx = Cell.h.yx;
-  double hyy = Cell.h.yy;
+  mat4r prevh = Cell.h;
 
-  double vhxx = Cell.vh.xx;
-  //  double vhxy = Cell.vhxy;
-  double vhyx = Cell.vh.yx;
-  //  double vhyy = Cell.vhyy;
+  // Make the modular transformation of the cell
+  // double dx = prevh.xy;
+  // Cell.h.xy -= dx;
+  Cell.h.xy = 0.0;
 
-  // modify the cell
-  Cell.h.xy -= hxx;
-  Cell.h.yy -= hyx;
-
-  Cell.vh.xy -= vhxx;
-  Cell.vh.yy -= vhyx;
+  mat4r newhinv = Cell.h.get_inverse();
 
   vec2r C;
   for (size_t i = 0; i < Particles.size(); i++) {
+
+    // barycenter of the fiber (reduced coordinates)
     C.reset();
     for (size_t p = 0; p < Particles[i].n; p++) {
-      C += Particles[i].pos[p];
+      C += prevh * Particles[i].pos[p];
     }
     C /= (double)(Particles[i].n);
 
-    std::vector<vec2r> newRealPos(Particles[i].n);
-    std::vector<vec2r> Vtemp(Particles[i].n);
-    std::vector<vec2r> accTemp(Particles[i].n);
+    //vec2r newRealCenterPos = (prevh * C);
 
-    // vec2r newRealVel;
-
-    if (C.y > 1.0 - C.x) {
+    if (C.x > prevh.xx) {
       for (size_t p = 0; p < Particles[i].n; p++) {
-        newRealPos[p].x = hxx * Particles[i].pos[p].x + hxy * Particles[i].pos[p].y - hxx;
-        newRealPos[p].y = hyx * Particles[i].pos[p].x + hyy * Particles[i].pos[p].y - hyx;
-
-        Vtemp[p].x = hxx * Particles[i].vel[p].x + hxy * Particles[i].vel[p].y;
-        Vtemp[p].y = hyx * Particles[i].vel[p].x + hyy * Particles[i].vel[p].y;
+        vec2r prevRealPos = prevh * Particles[i].pos[p];
+        prevRealPos.x -= prevh.xx;
+        Particles[i].pos[p] = newhinv * prevRealPos;
       }
     } else {
       for (size_t p = 0; p < Particles[i].n; p++) {
-        newRealPos[p].x = hxx * Particles[i].pos[p].x + hxy * Particles[i].pos[p].y;
-        newRealPos[p].y = hyx * Particles[i].pos[p].x + hyy * Particles[i].pos[p].y;
-        Vtemp[p].x = hxx * Particles[i].vel[p].x + hxy * Particles[i].vel[p].y;
-        Vtemp[p].y = hyx * Particles[i].vel[p].x + hyy * Particles[i].vel[p].y;
+        vec2r prevRealPos = prevh * Particles[i].pos[p];
+        Particles[i].pos[p] = newhinv * prevRealPos;
       }
     }
 
-    double invDet = 1.0 / (Cell.h.xx * Cell.h.yy - Cell.h.yx * Cell.h.xy);
-    double hxxinv = invDet * Cell.h.yy;
-    double hxyinv = -invDet * Cell.h.xy;
-    double hyxinv = -invDet * Cell.h.yx;
-    double hyyinv = invDet * Cell.h.xx;
-
-    for (size_t p = 0; p < Particles[i].n; p++) {
-      Particles[i].pos[p].x = hxxinv * newRealPos[p].x + hxyinv * newRealPos[p].y;
-      Particles[i].pos[p].y = hyxinv * newRealPos[p].x + hyyinv * newRealPos[p].y;
-      //  Particles[i].vel[p].x = hxxinv * Vtemp[p].x + hxyinv * Vtemp[p].y;
-      //  Particles[i].vel[p].y = hyxinv * Vtemp[p].x + hyyinv * Vtemp[p].y;
+    /*
+    if (C.y > 1.0 - C.x) { // upper part
+      for (size_t p = 0; p < Particles[i].n; p++) {
+        vec2r prevRealPos = prevh * Particles[i].pos[p];
+        prevRealPos.x -= prevh.xx;
+        Particles[i].pos[p] = newhinv * prevRealPos;
+      }
+    } else { // lower part
+      for (size_t p = 0; p < Particles[i].n; p++) {
+        vec2r prevRealPos = prevh * Particles[i].pos[p];
+        Particles[i].pos[p] = newhinv * prevRealPos;
+      }
     }
-
-    // todo : vitesses
+    */
   }
-  //	ResetCloseList(dVerlet); // Pas nécessaire je pense (les voisinnages ne devraient pas être cassés)
 }
 
 void FiberCell2DSimulation::CundallDamping() {
@@ -639,7 +625,6 @@ void FiberCell2DSimulation::CundallDamping() {
 }
 
 void FiberCell2DSimulation::ResetCloseList(double dmax) {
-  // std::cout << t << "  enter ResetCloseList\n";
 
   // First we need to store...
   std::vector<Interaction> Ibak;
@@ -653,10 +638,10 @@ void FiberCell2DSimulation::ResetCloseList(double dmax) {
   for (size_t i = 0; i < Particles.size(); i++) {
     for (size_t j = i + 1; j < Particles.size(); j++) {
 
-      for (size_t pi = 0; pi < Particles[i].n; pi++) {
-        for (size_t pj = 0; pj < Particles[j].n; pj++) {
+      for (size_t ki = 0; ki < Particles[i].n; ki++) {
+        for (size_t kj = 0; kj < Particles[j].n; kj++) {
 
-          vec2r sij = Particles[j].pos[pj] - Particles[i].pos[pi];
+          vec2r sij = Particles[j].pos[kj] - Particles[i].pos[ki];
           sij.x -= floor(sij.x + 0.5);
           sij.y -= floor(sij.y + 0.5);
 
@@ -665,7 +650,7 @@ void FiberCell2DSimulation::ResetCloseList(double dmax) {
           double Lij = n.normalize();
           double dn = Lij - Particles[i].radius - Particles[j].radius;
           if (dn <= dmax) {
-            Interactions.push_back(Interaction(i, j, pi, pj));
+            Interactions.push_back(Interaction(i, j, ki, kj));
           }
 
         } // pj
@@ -716,33 +701,24 @@ void FiberCell2DSimulation::ResetCloseList(double dmax) {
   }
 }
 
-void FiberCell2DSimulation::accelerations() {
-  // Set forces and moments to zero
-  for (size_t i = 0; i < Particles.size(); i++) {
-    for (size_t p = 0; p < Particles[i].n; p++) {
-      Particles[i].force[p].reset();
-      Particles[i].moment[p] = 0.0;
-    }
-  }
+void FiberCell2DSimulation::particleContactForces() {
 
-  Sig.reset(); //xx = Sigxy = Sigyx = Sigyy = 0.0;
-
-  size_t i, j, pi, pj;
+  size_t i, j, ki, kj;
 
   for (size_t k = 0; k < Interactions.size(); k++) {
     i = Interactions[k].i;
     j = Interactions[k].j;
-    pi = Interactions[k].ki;
-    pj = Interactions[k].kj;
+    ki = Interactions[k].ki;
+    kj = Interactions[k].kj;
+
     //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    vec2r sij = Particles[j].pos[pj] - Particles[i].pos[pi];
+    vec2r sij = Particles[j].pos[kj] - Particles[i].pos[ki];
     sij.x -= floor(sij.x + 0.5);
     sij.y -= floor(sij.y + 0.5);
 
-    vec2r vij = Particles[j].vel[pj] - Particles[i].vel[pi];
+    vec2r vij = Particles[j].vel[kj] - Particles[i].vel[ki];
     vec2r branch(Cell.h.xx * sij.x + Cell.h.xy * sij.y, Cell.h.yx * sij.x + Cell.h.yy * sij.y);
     vec2r Vij(Cell.h.xx * vij.x + Cell.h.xy * vij.y, Cell.h.yx * vij.x + Cell.h.yy * vij.y);
-    // TO CHECK: add Cell.vh * sij *****
 
     double Rij = (Particles[i].radius + Particles[j].radius);
 
@@ -788,7 +764,7 @@ void FiberCell2DSimulation::accelerations() {
       // double fn = -kc_n * dn;
       if (fn < 0.)
         fn = 0;
-      double Vrotij = Particles[i].radius * Particles[i].vrot[pi] - Particles[j].radius * Particles[j].vrot[pj];
+      double Vrotij = Particles[i].radius * Particles[i].vrot[ki] - Particles[j].radius * Particles[j].vrot[kj];
       vec2r Vsij = Vij - (Vij * n) * n + Vrotij * vt;
       // vec2r Vsij = Vij - (Vij * n) * n;
       vec2r delta_t = Vsij * dt;
@@ -810,10 +786,10 @@ void FiberCell2DSimulation::accelerations() {
 
       // #pragma omp critical
       {
-        Particles[i].force[pi] -= f;
-        Particles[j].force[pj] += f;
-        Particles[i].moment[pi] += Interactions[k].ft * Particles[i].radius;
-        Particles[j].moment[pj] -= Interactions[k].ft * Particles[j].radius;
+        Particles[i].force[ki] -= f;
+        Particles[j].force[kj] += f;
+        Particles[i].moment[ki] += Interactions[k].ft * Particles[i].radius;
+        Particles[j].moment[kj] -= Interactions[k].ft * Particles[j].radius;
         //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         // Internal stress
         Sig.xx += f.x * branch.x;
@@ -826,9 +802,25 @@ void FiberCell2DSimulation::accelerations() {
       Interactions[k].delta_t = 0.0;
     }
   } // Loop over interactions k
+}
+
+void FiberCell2DSimulation::accelerations() {
+  // Set forces and moments to zero
+  for (size_t i = 0; i < Particles.size(); i++) {
+    for (size_t p = 0; p < Particles[i].n; p++) {
+      Particles[i].force[p].reset();
+      Particles[i].moment[p] = 0.0;
+    }
+  }
+
+  Sig.reset();
+
+  // Compute the forces between ff/fg/gg
+  particleContactForces();
 
   // Compute the forces related to the flexibility of the fibers
   FiberInternalForces();
+
   double invV = 1.0 / (Cell.h.xx * Cell.h.yy - Cell.h.yx * Cell.h.xy);
   Sig.xx *= invV;
   Sig.xy *= invV;
@@ -942,7 +934,7 @@ void FiberCell2DSimulation::saveConf(int i) {
   conf << "claySOMEFv2 09-02-2015" << std::endl; // format: progName version-date
   conf << "result_folder " << result_folder << std::endl;
   conf << "t " << t << std::endl;
-  //conf << "t_exec " << clock() / 1000.0 << std::endl;
+  // conf << "t_exec " << clock() / 1000.0 << std::endl;
   conf << "tmax " << tmax << std::endl;
   conf << "dt " << dt << std::endl;
   conf << "interVerlet " << interVerlet << std::endl;

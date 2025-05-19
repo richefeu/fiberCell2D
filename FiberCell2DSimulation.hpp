@@ -66,6 +66,7 @@ public:
   void ModularTransformation();
   void updatePlateletMoments();
   void accelerations();
+  void particleContactForces();
   void FiberInternalForces();
   void ResetCloseList(double dmax);
   void saveConf(int i);

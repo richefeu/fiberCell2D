@@ -4,7 +4,7 @@
 
 struct Interaction {
   size_t i, j;
-  size_t ki, kj;
+  size_t ki, kj; // ki is bar number, kj is node number
   double fn, ft, delta_t;
 
   Interaction();
